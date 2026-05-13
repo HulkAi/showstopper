@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>graphify - graphify-out/graph.html</title>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f0f1a; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; display: flex; height: 100vh; overflow: hidden; }
+  #graph { flex: 1; }
+  #sidebar { width: 280px; background: #1a1a2e; border-left: 1px solid #2a2a4e; display: flex; flex-direction: column; overflow: hidden; }
+  #search-wrap { padding: 12px; border-bottom: 1px solid #2a2a4e; }
+  #search { width: 100%; background: #0f0f1a; border: 1px solid #3a3a5e; color: #e0e0e0; padding: 7px 10px; border-radius: 6px; font-size: 13px; outline: none; }
+  #search:focus { border-color: #4E79A7; }
+  #search-results { max-height: 140px; overflow-y: auto; padding: 4px 12px; border-bottom: 1px solid #2a2a4e; display: none; }
+  .search-item { padding: 4px 6px; cursor: pointer; border-radius: 4px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .search-item:hover { background: #2a2a4e; }
+  #info-panel { padding: 14px; border-bottom: 1px solid #2a2a4e; min-height: 140px; }
+  #info-panel h3 { font-size: 13px; color: #aaa; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+  #info-content { font-size: 13px; color: #ccc; line-height: 1.6; }
+  #info-content .field { margin-bottom: 5px; }
+  #info-content .field b { color: #e0e0e0; }
+  #info-content .empty { color: #555; font-style: italic; }
+  .neighbor-link { display: block; padding: 2px 6px; margin: 2px 0; border-radius: 3px; cursor: pointer; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid #333; }
+  .neighbor-link:hover { background: #2a2a4e; }
+  #neighbors-list { max-height: 160px; overflow-y: auto; margin-top: 4px; }
+  #legend-wrap { flex: 1; overflow-y: auto; padding: 12px; }
+  #legend-wrap h3 { font-size: 13px; color: #aaa; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .legend-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; border-radius: 4px; font-size: 12px; }
+  .legend-item:hover { background: #2a2a4e; padding-left: 4px; }
+  .legend-item.dimmed { opacity: 0.35; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .legend-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend-count { color: #666; font-size: 11px; }
+  #stats { padding: 10px 14px; border-top: 1px solid #2a2a4e; font-size: 11px; color: #555; }
+  #legend-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 4px 0; }
+  #legend-controls label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; color: #aaa; user-select: none; }
+  #legend-controls label:hover { color: #e0e0e0; }
+  .legend-cb, #select-all-cb { appearance: none; -webkit-appearance: none; width: 14px; height: 14px; border: 1.5px solid #3a3a5e; border-radius: 3px; background: #0f0f1a; cursor: pointer; position: relative; flex-shrink: 0; }
+  .legend-cb:checked, #select-all-cb:checked { background: #4E79A7; border-color: #4E79A7; }
+  .legend-cb:checked::after, #select-all-cb:checked::after { content: ''; position: absolute; left: 3.5px; top: 1px; width: 4px; height: 7px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  #select-all-cb:indeterminate { background: #4E79A7; border-color: #4E79A7; }
+  #select-all-cb:indeterminate::after { content: ''; position: absolute; left: 2px; top: 5px; width: 8px; height: 2px; background: #fff; border: none; transform: none; }
+</style>
+</head>
+<body>
+<div id="graph"></div>
+<div id="sidebar">
+  <div id="search-wrap">
+    <input id="search" type="text" placeholder="Search nodes..." autocomplete="off">
+    <div id="search-results"></div>
+  </div>
+  <div id="info-panel">
+    <h3>Node Info</h3>
+    <div id="info-content"><span class="empty">Click a node to inspect it</span></div>
+  </div>
+  <div id="legend-wrap">
+    <h3>Communities</h3>
+    <div id="legend-controls">
+      <label><input type="checkbox" id="select-all-cb" checked onchange="toggleAllCommunities(!this.checked)">Select All</label>
+    </div>
+    <div id="legend"></div>
+  </div>
+  <div id="stats">47 nodes &middot; 69 edges &middot; 7 communities</div>
+</div>
+<script>
+const RAW_NODES = [{"id": "script_js", "label": "script.js", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 34.5, "font": {"size": 12, "color": "#ffffff"}, "title": "script.js", "community": 1, "community_name": "DOM Element Selectors", "source_file": "script.js", "file_type": "code", "degree": 9}, {"id": "new_image_designs_script_herotag", "label": "heroTag", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 12.7, "font": {"size": 0, "color": "#ffffff"}, "title": "heroTag", "community": 1, "community_name": "DOM Element Selectors", "source_file": "script.js", "file_type": "code", "degree": 1}, {"id": "new_image_designs_script_herotitle", "label": "heroTitle", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 12.7, "font": {"size": 0, "color": "#ffffff"}, "title": "heroTitle", "community": 1, "community_name": "DOM Element Selectors", "source_file": "script.js", "file_type": "code", "degree": 1}, {"id": "new_image_designs_script_herodesc", "label": "heroDesc", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 12.7, "font": {"size": 0, "color": "#ffffff"}, "title": "heroDesc", "community": 1, "community_name": "DOM Element Selectors", "source_file": "script.js", "file_type": "code", "degree": 1}, {"id": "new_image_designs_script_portfoliogrid", "label": "portfolioGrid", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 12.7, "font": {"size": 0, "color": "#ffffff"}, "title": "portfolioGrid", "community": 1, "community_name": "DOM Element Selectors", "source_file": "script.js", "file_type": "code", "degree": 1}, {"id": "new_image_designs_script_loadportfolio", "label": "loadPortfolio()", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 18.2, "font": {"size": 12, "color": "#ffffff"}, "title": "loadPortfolio()", "community": 1, "community_name": "DOM Element Selectors", "source_file": "script.js", "file_type": "code", "degree": 3}, {"id": "new_image_designs_script_renderprojects", "label": "renderProjects()", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 18.2, "font": {"size": 12, "color": "#ffffff"}, "title": "renderProjects()", "community": 1, "community_name": "DOM Element Selectors", "source_file": "script.js", "file_type": "code", "degree": 3}, {"id": "new_image_designs_script_initreveal", "label": "initReveal()", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 15.5, "font": {"size": 12, "color": "#ffffff"}, "title": "initReveal()", "community": 1, "community_name": "DOM Element Selectors", "source_file": "script.js", "file_type": "code", "degree": 2}, {"id": "new_image_designs_script_initfiltering", "label": "initFiltering()", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 15.5, "font": {"size": 12, "color": "#ffffff"}, "title": "initFiltering()", "community": 1, "community_name": "DOM Element Selectors", "source_file": "script.js", "file_type": "code", "degree": 2}, {"id": "new_image_designs_script_target", "label": "target", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 12.7, "font": {"size": 0, "color": "#ffffff"}, "title": "target", "community": 1, "community_name": "DOM Element Selectors", "source_file": "script.js", "file_type": "code", "degree": 1}, {"id": "script_js_main", "label": "script.js DOMContentLoaded entry point", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 34.5, "font": {"size": 12, "color": "#ffffff"}, "title": "script.js DOMContentLoaded entry point", "community": 4, "community_name": "Navigation & Scroll Controls", "source_file": "script.js", "file_type": "code", "degree": 9}, {"id": "script_js_loadPortfolio", "label": "loadPortfolio() async data fetcher", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 20.9, "font": {"size": 12, "color": "#ffffff"}, "title": "loadPortfolio() async data fetcher", "community": 0, "community_name": "Gallery Filtering & Rendering", "source_file": "script.js", "file_type": "code", "degree": 4}, {"id": "script_js_renderProjects", "label": "renderProjects() DOM renderer", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 23.6, "font": {"size": 12, "color": "#ffffff"}, "title": "renderProjects() DOM renderer", "community": 0, "community_name": "Gallery Filtering & Rendering", "source_file": "script.js", "file_type": "code", "degree": 5}, {"id": "script_js_initReveal", "label": "initReveal() IntersectionObserver scroll reveal", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 15.5, "font": {"size": 12, "color": "#ffffff"}, "title": "initReveal() IntersectionObserver scroll reveal", "community": 0, "community_name": "Gallery Filtering & Rendering", "source_file": "script.js", "file_type": "code", "degree": 2}, {"id": "script_js_initFiltering", "label": "initFiltering() gallery filter controller", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 20.9, "font": {"size": 12, "color": "#ffffff"}, "title": "initFiltering() gallery filter controller", "community": 0, "community_name": "Gallery Filtering & Rendering", "source_file": "script.js", "file_type": "code", "degree": 4}, {"id": "script_js_heroAnimation", "label": "Hero cascading fade-in animation (setTimeout)", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 18.2, "font": {"size": 12, "color": "#ffffff"}, "title": "Hero cascading fade-in animation (setTimeout)", "community": 3, "community_name": "Hero & Animation System", "source_file": "script.js", "file_type": "code", "degree": 3}, {"id": "script_js_smoothScrolling", "label": "Anchor link smooth scrolling", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 15.5, "font": {"size": 12, "color": "#ffffff"}, "title": "Anchor link smooth scrolling", "community": 4, "community_name": "Navigation & Scroll Controls", "source_file": "script.js", "file_type": "code", "degree": 2}, {"id": "index_html", "label": "index.html page structure", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 20.9, "font": {"size": 12, "color": "#ffffff"}, "title": "index.html page structure", "community": 2, "community_name": "Theme System & Layout", "source_file": "index.html", "file_type": "code", "degree": 4}, {"id": "index_css", "label": "index.css stylesheet", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 15.5, "font": {"size": 12, "color": "#ffffff"}, "title": "index.css stylesheet", "community": 2, "community_name": "Theme System & Layout", "source_file": "index.css", "file_type": "code", "degree": 2}, {"id": "portfolio_grid", "label": "Portfolio grid container (#portfolio-grid)", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 18.2, "font": {"size": 12, "color": "#ffffff"}, "title": "Portfolio grid container (#portfolio-grid)", "community": 0, "community_name": "Gallery Filtering & Rendering", "source_file": "index.html", "file_type": "code", "degree": 3}, {"id": "lightbox_component", "label": "Lightbox modal (#lightbox)", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 15.5, "font": {"size": 12, "color": "#ffffff"}, "title": "Lightbox modal (#lightbox)", "community": 0, "community_name": "Gallery Filtering & Rendering", "source_file": "index.html", "file_type": "code", "degree": 2}, {"id": "hero_section", "label": "Hero section (#hero)", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 18.2, "font": {"size": 12, "color": "#ffffff"}, "title": "Hero section (#hero)", "community": 3, "community_name": "Hero & Animation System", "source_file": "index.html", "file_type": "code", "degree": 3}, {"id": "manifesto_section", "label": "Manifesto section (#manifesto)", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 15.5, "font": {"size": 12, "color": "#ffffff"}, "title": "Manifesto section (#manifesto)", "community": 3, "community_name": "Hero & Animation System", "source_file": "index.html", "file_type": "code", "degree": 2}, {"id": "gallery_section", "label": "Gallery section (#work)", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 18.2, "font": {"size": 12, "color": "#ffffff"}, "title": "Gallery section (#work)", "community": 0, "community_name": "Gallery Filtering & Rendering", "source_file": "index.html", "file_type": "code", "degree": 3}, {"id": "filter_buttons", "label": "Gallery filter button group (.filter-btn)", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 18.2, "font": {"size": 12, "color": "#ffffff"}, "title": "Gallery filter button group (.filter-btn)", "community": 0, "community_name": "Gallery Filtering & Rendering", "source_file": "index.html", "file_type": "code", "degree": 3}, {"id": "nav_component", "label": "Fixed navigation bar (#nav)", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 12.7, "font": {"size": 0, "color": "#ffffff"}, "title": "Fixed navigation bar (#nav)", "community": 4, "community_name": "Navigation & Scroll Controls", "source_file": "index.html", "file_type": "code", "degree": 1}, {"id": "scroll_progress_bar", "label": "Scroll progress indicator (#scroll-progress)", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 12.7, "font": {"size": 0, "color": "#ffffff"}, "title": "Scroll progress indicator (#scroll-progress)", "community": 4, "community_name": "Navigation & Scroll Controls", "source_file": "index.html", "file_type": "code", "degree": 1}, {"id": "grain_overlay", "label": "Film grain overlay (.grain-overlay)", "color": {"background": "#B07AA1", "border": "#B07AA1", "highlight": {"background": "#ffffff", "border": "#B07AA1"}}, "size": 10.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Film grain overlay (.grain-overlay)", "community": 6, "community_name": "Grain Overlay Effect", "source_file": "index.html", "file_type": "code", "degree": 0}, {"id": "morph_canvas", "label": "Morphing background canvas (#morph-canvas)", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 12.7, "font": {"size": 0, "color": "#ffffff"}, "title": "Morphing background canvas (#morph-canvas)", "community": 4, "community_name": "Navigation & Scroll Controls", "source_file": "index.html", "file_type": "code", "degree": 1}, {"id": "angled_dividers", "label": "Angled CSS divider elements (.angled-divider)", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 18.2, "font": {"size": 12, "color": "#ffffff"}, "title": "Angled CSS divider elements (.angled-divider)", "community": 3, "community_name": "Hero & Animation System", "source_file": "index.html", "file_type": "code", "degree": 3}, {"id": "back_to_top_btn", "label": "Back-to-top button (#back-to-top)", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 12.7, "font": {"size": 0, "color": "#ffffff"}, "title": "Back-to-top button (#back-to-top)", "community": 4, "community_name": "Navigation & Scroll Controls", "source_file": "index.html", "file_type": "code", "degree": 1}, {"id": "projects_json", "label": "projects.json gallery data source", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 15.5, "font": {"size": 12, "color": "#ffffff"}, "title": "projects.json gallery data source", "community": 0, "community_name": "Gallery Filtering & Rendering", "source_file": "projects.json", "file_type": "document", "degree": 2}, {"id": "design_doc", "label": "Portfolio Redesign Design Document (2026-05-12)", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 37.3, "font": {"size": 12, "color": "#ffffff"}, "title": "Portfolio Redesign Design Document (2026-05-12)", "community": 5, "community_name": "Design Planning & Architecture", "source_file": "docs/plans/2026-05-12-portfolio-redesign-design.md", "file_type": "document", "degree": 10}, {"id": "implementation_plan", "label": "Portfolio Redesign Implementation Plan (2026-05-12)", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 40.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Portfolio Redesign Implementation Plan (2026-05-12)", "community": 2, "community_name": "Theme System & Layout", "source_file": "docs/plans/2026-05-12-portfolio-redesign-plan.md", "file_type": "document", "degree": 11}, {"id": "scroll_driven_theme_transition", "label": "Scroll-driven light-to-dark theme transition", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 26.4, "font": {"size": 12, "color": "#ffffff"}, "title": "Scroll-driven light-to-dark theme transition", "community": 2, "community_name": "Theme System & Layout", "source_file": "docs/plans/2026-05-12-portfolio-redesign-design.md", "file_type": "rationale", "degree": 6}, {"id": "gsap_animation_timeline", "label": "GSAP overlapping animation timeline system", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 20.9, "font": {"size": 12, "color": "#ffffff"}, "title": "GSAP overlapping animation timeline system", "community": 3, "community_name": "Hero & Animation System", "source_file": "docs/plans/2026-05-12-portfolio-redesign-design.md", "file_type": "rationale", "degree": 4}, {"id": "slanted_gradient_headers", "label": "Slanted gradient header design pattern", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 12.7, "font": {"size": 0, "color": "#ffffff"}, "title": "Slanted gradient header design pattern", "community": 5, "community_name": "Design Planning & Architecture", "source_file": "docs/plans/2026-05-12-portfolio-redesign-design.md", "file_type": "rationale", "degree": 1}, {"id": "manual_theme_toggle", "label": "Manual theme toggle with localStorage persistence", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 20.9, "font": {"size": 12, "color": "#ffffff"}, "title": "Manual theme toggle with localStorage persistence", "community": 2, "community_name": "Theme System & Layout", "source_file": "docs/plans/2026-05-12-portfolio-redesign-design.md", "file_type": "rationale", "degree": 4}, {"id": "css_theme_system", "label": "CSS custom properties dual-theme system (light/dark)", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 18.2, "font": {"size": 12, "color": "#ffffff"}, "title": "CSS custom properties dual-theme system (light/dark)", "community": 2, "community_name": "Theme System & Layout", "source_file": "docs/plans/2026-05-12-portfolio-redesign-plan.md", "file_type": "rationale", "degree": 3}, {"id": "diagonal_clip_path_divider", "label": "Diagonal clip-path transition divider", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 18.2, "font": {"size": 12, "color": "#ffffff"}, "title": "Diagonal clip-path transition divider", "community": 3, "community_name": "Hero & Animation System", "source_file": "docs/plans/2026-05-12-portfolio-redesign-design.md", "file_type": "rationale", "degree": 3}, {"id": "inline_svg_icons", "label": "Inline SVG icons approach", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 12.7, "font": {"size": 0, "color": "#ffffff"}, "title": "Inline SVG icons approach", "community": 2, "community_name": "Theme System & Layout", "source_file": "docs/plans/2026-05-12-portfolio-redesign-plan.md", "file_type": "rationale", "degree": 1}, {"id": "single_file_architecture", "label": "Single-file no-build architecture principle", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 15.5, "font": {"size": 12, "color": "#ffffff"}, "title": "Single-file no-build architecture principle", "community": 5, "community_name": "Design Planning & Architecture", "source_file": "docs/plans/2026-05-12-portfolio-redesign-design.md", "file_type": "rationale", "degree": 2}, {"id": "intersection_observer_fallback", "label": "Intersection Observer reveal fallback", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 15.5, "font": {"size": 12, "color": "#ffffff"}, "title": "Intersection Observer reveal fallback", "community": 0, "community_name": "Gallery Filtering & Rendering", "source_file": "docs/plans/2026-05-12-portfolio-redesign-plan.md", "file_type": "rationale", "degree": 2}, {"id": "gsap_cdn_dependency", "label": "GSAP 3.x + ScrollTrigger CDN dependency", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 12.7, "font": {"size": 0, "color": "#ffffff"}, "title": "GSAP 3.x + ScrollTrigger CDN dependency", "community": 5, "community_name": "Design Planning & Architecture", "source_file": "docs/plans/2026-05-12-portfolio-redesign-design.md", "file_type": "rationale", "degree": 1}, {"id": "lumina_creative_studio", "label": "Lumina Creative Studio brand", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 15.5, "font": {"size": 12, "color": "#ffffff"}, "title": "Lumina Creative Studio brand", "community": 5, "community_name": "Design Planning & Architecture", "source_file": "index.html", "file_type": "document", "degree": 2}, {"id": "wayne_clarke_portfolio", "label": "Wayne Clarke Portfolio", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 15.5, "font": {"size": 12, "color": "#ffffff"}, "title": "Wayne Clarke Portfolio", "community": 5, "community_name": "Design Planning & Architecture", "source_file": "docs/plans/2026-05-12-portfolio-redesign-design.md", "file_type": "document", "degree": 2}, {"id": "data_category_attribute", "label": "data-category / data-filter attribute convention", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 15.5, "font": {"size": 12, "color": "#ffffff"}, "title": "data-category / data-filter attribute convention", "community": 0, "community_name": "Gallery Filtering & Rendering", "source_file": "index.html", "file_type": "rationale", "degree": 2}];
+const RAW_EDGES = [{"from": "script_js", "to": "new_image_designs_script_herotag", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js", "to": "new_image_designs_script_herotitle", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js", "to": "new_image_designs_script_herodesc", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js", "to": "new_image_designs_script_portfoliogrid", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js", "to": "new_image_designs_script_loadportfolio", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js", "to": "new_image_designs_script_renderprojects", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js", "to": "new_image_designs_script_initreveal", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js", "to": "new_image_designs_script_initfiltering", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js", "to": "new_image_designs_script_target", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "new_image_designs_script_loadportfolio", "to": "new_image_designs_script_renderprojects", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "new_image_designs_script_loadportfolio", "to": "new_image_designs_script_initfiltering", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "new_image_designs_script_renderprojects", "to": "new_image_designs_script_initreveal", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js_main", "to": "script_js_loadPortfolio", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js_main", "to": "script_js_heroAnimation", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js_main", "to": "script_js_smoothScrolling", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "index_html", "to": "script_js_main", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "implementation_plan", "to": "script_js_main", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "lightbox_component", "to": "script_js_main", "label": "shares_data_with", "title": "shares_data_with [AMBIGUOUS]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "AMBIGUOUS"}, {"from": "morph_canvas", "to": "script_js_main", "label": "shares_data_with", "title": "shares_data_with [AMBIGUOUS]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "AMBIGUOUS"}, {"from": "scroll_progress_bar", "to": "script_js_main", "label": "shares_data_with", "title": "shares_data_with [AMBIGUOUS]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "AMBIGUOUS"}, {"from": "back_to_top_btn", "to": "script_js_main", "label": "shares_data_with", "title": "shares_data_with [AMBIGUOUS]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "AMBIGUOUS"}, {"from": "script_js_loadPortfolio", "to": "projects_json", "label": "shares_data_with", "title": "shares_data_with [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js_loadPortfolio", "to": "script_js_renderProjects", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js_loadPortfolio", "to": "script_js_initFiltering", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js_renderProjects", "to": "portfolio_grid", "label": "shares_data_with", "title": "shares_data_with [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js_renderProjects", "to": "script_js_initReveal", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js_renderProjects", "to": "data_category_attribute", "label": "shares_data_with", "title": "shares_data_with [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js_initFiltering", "to": "script_js_renderProjects", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js_initReveal", "to": "intersection_observer_fallback", "label": "semantically_similar_to", "title": "semantically_similar_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "script_js_initFiltering", "to": "filter_buttons", "label": "shares_data_with", "title": "shares_data_with [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js_initFiltering", "to": "portfolio_grid", "label": "shares_data_with", "title": "shares_data_with [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "script_js_heroAnimation", "to": "hero_section", "label": "shares_data_with", "title": "shares_data_with [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "gsap_animation_timeline", "to": "script_js_heroAnimation", "label": "semantically_similar_to", "title": "semantically_similar_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "script_js_smoothScrolling", "to": "nav_component", "label": "shares_data_with", "title": "shares_data_with [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "index_html", "to": "index_css", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "implementation_plan", "to": "index_html", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "single_file_architecture", "to": "index_html", "label": "rationale_for", "title": "rationale_for [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "implementation_plan", "to": "index_css", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "portfolio_grid", "to": "gallery_section", "label": "shares_data_with", "title": "shares_data_with [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "lightbox_component", "to": "gallery_section", "label": "conceptually_related_to", "title": "conceptually_related_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "hero_section", "to": "angled_dividers", "label": "shares_data_with", "title": "shares_data_with [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "manifesto_section", "to": "hero_section", "label": "conceptually_related_to", "title": "conceptually_related_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "manifesto_section", "to": "angled_dividers", "label": "shares_data_with", "title": "shares_data_with [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "filter_buttons", "to": "gallery_section", "label": "shares_data_with", "title": "shares_data_with [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "filter_buttons", "to": "data_category_attribute", "label": "shares_data_with", "title": "shares_data_with [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "angled_dividers", "to": "diagonal_clip_path_divider", "label": "semantically_similar_to", "title": "semantically_similar_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "implementation_plan", "to": "projects_json", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "design_doc", "to": "lumina_creative_studio", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "design_doc", "to": "wayne_clarke_portfolio", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "design_doc", "to": "scroll_driven_theme_transition", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "design_doc", "to": "gsap_animation_timeline", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "design_doc", "to": "slanted_gradient_headers", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "design_doc", "to": "manual_theme_toggle", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "design_doc", "to": "diagonal_clip_path_divider", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "design_doc", "to": "single_file_architecture", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "design_doc", "to": "gsap_cdn_dependency", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "implementation_plan", "to": "design_doc", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "implementation_plan", "to": "css_theme_system", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "implementation_plan", "to": "inline_svg_icons", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "implementation_plan", "to": "intersection_observer_fallback", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "implementation_plan", "to": "scroll_driven_theme_transition", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "implementation_plan", "to": "gsap_animation_timeline", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "implementation_plan", "to": "manual_theme_toggle", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "scroll_driven_theme_transition", "to": "css_theme_system", "label": "conceptually_related_to", "title": "conceptually_related_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "gsap_animation_timeline", "to": "scroll_driven_theme_transition", "label": "conceptually_related_to", "title": "conceptually_related_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "diagonal_clip_path_divider", "to": "scroll_driven_theme_transition", "label": "conceptually_related_to", "title": "conceptually_related_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "manual_theme_toggle", "to": "scroll_driven_theme_transition", "label": "conceptually_related_to", "title": "conceptually_related_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "manual_theme_toggle", "to": "css_theme_system", "label": "conceptually_related_to", "title": "conceptually_related_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "lumina_creative_studio", "to": "wayne_clarke_portfolio", "label": "semantically_similar_to", "title": "semantically_similar_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}];
+const LEGEND = [{"cid": 0, "color": "#4E79A7", "label": "Gallery Filtering &amp; Rendering", "count": 11}, {"cid": 1, "color": "#F28E2B", "label": "DOM Element Selectors", "count": 10}, {"cid": 2, "color": "#E15759", "label": "Theme System &amp; Layout", "count": 7}, {"cid": 3, "color": "#76B7B2", "label": "Hero &amp; Animation System", "count": 6}, {"cid": 4, "color": "#59A14F", "label": "Navigation &amp; Scroll Controls", "count": 6}, {"cid": 5, "color": "#EDC948", "label": "Design Planning &amp; Architecture", "count": 6}, {"cid": 6, "color": "#B07AA1", "label": "Grain Overlay Effect", "count": 1}];
+
+// HTML-escape helper — prevents XSS when injecting graph data into innerHTML
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Build vis datasets
+const nodesDS = new vis.DataSet(RAW_NODES.map(n => ({
+  id: n.id, label: n.label, color: n.color, size: n.size,
+  font: n.font, title: n.title,
+  _community: n.community, _community_name: n.community_name,
+  _source_file: n.source_file, _file_type: n.file_type, _degree: n.degree,
+})));
+
+const edgesDS = new vis.DataSet(RAW_EDGES.map((e, i) => ({
+  id: i, from: e.from, to: e.to,
+  label: '',
+  title: e.title,
+  dashes: e.dashes,
+  width: e.width,
+  color: e.color,
+  arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+})));
+
+const container = document.getElementById('graph');
+const network = new vis.Network(container, { nodes: nodesDS, edges: edgesDS }, {
+  physics: {
+    enabled: true,
+    solver: 'forceAtlas2Based',
+    forceAtlas2Based: {
+      gravitationalConstant: -60,
+      centralGravity: 0.005,
+      springLength: 120,
+      springConstant: 0.08,
+      damping: 0.4,
+      avoidOverlap: 0.8,
+    },
+    stabilization: { iterations: 200, fit: true },
+  },
+  interaction: {
+    hover: true,
+    tooltipDelay: 100,
+    hideEdgesOnDrag: true,
+    navigationButtons: false,
+    keyboard: false,
+  },
+  nodes: { shape: 'dot', borderWidth: 1.5 },
+  edges: { smooth: { type: 'continuous', roundness: 0.2 }, selectionWidth: 3 },
+});
+
+network.once('stabilizationIterationsDone', () => {
+  network.setOptions({ physics: { enabled: false } });
+});
+
+function showInfo(nodeId) {
+  const n = nodesDS.get(nodeId);
+  if (!n) return;
+  const neighborIds = network.getConnectedNodes(nodeId);
+  const neighborItems = neighborIds.map(nid => {
+    const nb = nodesDS.get(nid);
+    const color = nb ? nb.color.background : '#555';
+    return `<span class="neighbor-link" style="border-left-color:${esc(color)}" onclick="focusNode(${JSON.stringify(nid)})">${esc(nb ? nb.label : nid)}</span>`;
+  }).join('');
+  document.getElementById('info-content').innerHTML = `
+    <div class="field"><b>${esc(n.label)}</b></div>
+    <div class="field">Type: ${esc(n._file_type || 'unknown')}</div>
+    <div class="field">Community: ${esc(n._community_name)}</div>
+    <div class="field">Source: ${esc(n._source_file || '-')}</div>
+    <div class="field">Degree: ${n._degree}</div>
+    ${neighborIds.length ? `<div class="field" style="margin-top:8px;color:#aaa;font-size:11px">Neighbors (${neighborIds.length})</div><div id="neighbors-list">${neighborItems}</div>` : ''}
+  `;
+}
+
+function focusNode(nodeId) {
+  network.focus(nodeId, { scale: 1.4, animation: true });
+  network.selectNodes([nodeId]);
+  showInfo(nodeId);
+}
+
+// Track hovered node — hover detection is more reliable than click params
+let hoveredNodeId = null;
+network.on('hoverNode', params => {
+  hoveredNodeId = params.node;
+  container.style.cursor = 'pointer';
+});
+network.on('blurNode', () => {
+  hoveredNodeId = null;
+  container.style.cursor = 'default';
+});
+container.addEventListener('click', () => {
+  if (hoveredNodeId !== null) {
+    showInfo(hoveredNodeId);
+    network.selectNodes([hoveredNodeId]);
+  }
+});
+network.on('click', params => {
+  if (params.nodes.length > 0) {
+    showInfo(params.nodes[0]);
+  } else if (hoveredNodeId === null) {
+    document.getElementById('info-content').innerHTML = '<span class="empty">Click a node to inspect it</span>';
+  }
+});
+
+const searchInput = document.getElementById('search');
+const searchResults = document.getElementById('search-results');
+searchInput.addEventListener('input', () => {
+  const q = searchInput.value.toLowerCase().trim();
+  searchResults.innerHTML = '';
+  if (!q) { searchResults.style.display = 'none'; return; }
+  const matches = RAW_NODES.filter(n => n.label.toLowerCase().includes(q)).slice(0, 20);
+  if (!matches.length) { searchResults.style.display = 'none'; return; }
+  searchResults.style.display = 'block';
+  matches.forEach(n => {
+    const el = document.createElement('div');
+    el.className = 'search-item';
+    el.textContent = n.label;
+    el.style.borderLeft = `3px solid ${n.color.background}`;
+    el.style.paddingLeft = '8px';
+    el.onclick = () => {
+      network.focus(n.id, { scale: 1.5, animation: true });
+      network.selectNodes([n.id]);
+      showInfo(n.id);
+      searchResults.style.display = 'none';
+      searchInput.value = '';
+    };
+    searchResults.appendChild(el);
+  });
+});
+document.addEventListener('click', e => {
+  if (!searchResults.contains(e.target) && e.target !== searchInput)
+    searchResults.style.display = 'none';
+});
+
+const hiddenCommunities = new Set();
+
+const selectAllCb = document.getElementById('select-all-cb');
+
+function updateSelectAllState() {
+  const total = LEGEND.length;
+  const hidden = hiddenCommunities.size;
+  selectAllCb.checked = hidden === 0;
+  selectAllCb.indeterminate = hidden > 0 && hidden < total;
+}
+
+function toggleAllCommunities(hide) {
+  document.querySelectorAll('.legend-item').forEach(item => {
+    hide ? item.classList.add('dimmed') : item.classList.remove('dimmed');
+  });
+  document.querySelectorAll('.legend-cb').forEach(cb => {
+    cb.checked = !hide;
+  });
+  LEGEND.forEach(c => {
+    if (hide) hiddenCommunities.add(c.cid); else hiddenCommunities.delete(c.cid);
+  });
+  const updates = RAW_NODES.map(n => ({ id: n.id, hidden: hide }));
+  nodesDS.update(updates);
+  updateSelectAllState();
+}
+
+const legendEl = document.getElementById('legend');
+LEGEND.forEach(c => {
+  const item = document.createElement('div');
+  item.className = 'legend-item';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.className = 'legend-cb';
+  cb.checked = true;
+  cb.addEventListener('change', (e) => {
+    e.stopPropagation();
+    if (cb.checked) {
+      hiddenCommunities.delete(c.cid);
+      item.classList.remove('dimmed');
+    } else {
+      hiddenCommunities.add(c.cid);
+      item.classList.add('dimmed');
+    }
+    const updates = RAW_NODES
+      .filter(n => n.community === c.cid)
+      .map(n => ({ id: n.id, hidden: !cb.checked }));
+    nodesDS.update(updates);
+    updateSelectAllState();
+  });
+  item.innerHTML = `<div class="legend-dot" style="background:${c.color}"></div>
+    <span class="legend-label">${c.label}</span>
+    <span class="legend-count">${c.count}</span>`;
+  item.prepend(cb);
+  item.onclick = (e) => {
+    if (e.target === cb) return;
+    cb.checked = !cb.checked;
+    cb.dispatchEvent(new Event('change'));
+  };
+  legendEl.appendChild(item);
+});
+</script>
+<script>
+// Render hyperedges as shaded regions
+const hyperedges = [{"id": "gallery_data_pipeline", "label": "Gallery loading and filtering data pipeline", "nodes": ["portfolio_grid", "script_js_renderProjects", "script_js_initFiltering", "filter_buttons", "projects_json", "data_category_attribute"], "relation": "participate_in", "confidence": "INFERRED", "confidence_score": 0.95, "source_file": "script.js"}, {"id": "hero_entrance_animation_alternatives", "label": "Hero entrance animation: existing setTimeout vs planned GSAP timeline", "nodes": ["hero_section", "script_js_heroAnimation", "gsap_animation_timeline"], "relation": "participate_in", "confidence": "INFERRED", "confidence_score": 0.85, "source_file": "docs/plans/2026-05-12-portfolio-redesign-design.md"}, {"id": "theme_transition_architecture", "label": "Light-to-dark theme transition architecture", "nodes": ["scroll_driven_theme_transition", "manual_theme_toggle", "css_theme_system", "diagonal_clip_path_divider"], "relation": "participate_in", "confidence": "INFERRED", "confidence_score": 0.95, "source_file": "docs/plans/2026-05-12-portfolio-redesign-design.md"}];
+// afterDrawing passes ctx already transformed to network coordinate space.
+// Draw node positions raw — no manual pan/zoom/DPR math needed.
+network.on('afterDrawing', function(ctx) {
+    hyperedges.forEach(h => {
+        const positions = h.nodes
+            .map(nid => network.getPositions([nid])[nid])
+            .filter(p => p !== undefined);
+        if (positions.length < 2) return;
+        ctx.save();
+        ctx.globalAlpha = 0.12;
+        ctx.fillStyle = '#6366f1';
+        ctx.strokeStyle = '#6366f1';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        // Centroid and expanded hull in network coordinates
+        const cx = positions.reduce((s, p) => s + p.x, 0) / positions.length;
+        const cy = positions.reduce((s, p) => s + p.y, 0) / positions.length;
+        const expanded = positions.map(p => ({
+            x: cx + (p.x - cx) * 1.15,
+            y: cy + (p.y - cy) * 1.15
+        }));
+        ctx.moveTo(expanded[0].x, expanded[0].y);
+        expanded.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 0.4;
+        ctx.stroke();
+        // Label
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = '#4f46e5';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(h.label, cx, cy - 5);
+        ctx.restore();
+    });
+});
+</script>
+</body>
+</html>

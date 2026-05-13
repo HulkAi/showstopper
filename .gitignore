@@ -1,0 +1,42 @@
+# Project-specific generated output
+.opencode/graphify-out
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# tcommands
+cmd.txt
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / frontend tooling
+node_modules/
+dist/
+build/
+coverage/
+.cache/
+
+# Misc archives
+*.zip
+*.tar
+*.gz
+*.rar
