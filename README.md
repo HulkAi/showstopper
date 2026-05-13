@@ -33,7 +33,7 @@ The site currently includes:
 - `projects.json` - portfolio item metadata and category data
 - `media/` - images and videos used by the page
 - `logo.svg` - site logo
-- `html_optimizer.py` - utility script for HTML minification and optional inlining/compression
+- `html_optimizer.py` - utility script for HTML minification, inlining, and compressed browser-unpacked output
 
 ## Requirements
 
@@ -143,7 +143,7 @@ The repository includes [`html_optimizer.py`](./html_optimizer.py), a small comm
 
 - Minifying HTML
 - Inlining local CSS and JavaScript assets
-- Optionally compressing and wrapping output in a browser-decompressed payload
+- Compressing and wrapping output in a browser-decompressed payload by default
 
 Usage:
 
@@ -157,10 +157,16 @@ Inline external assets before output:
 python html_optimizer.py index.html -o output.html --inline
 ```
 
-Generate the compressed/obfuscated version:
+Generate the compressed/obfuscated version explicitly:
 
 ```bash
 python html_optimizer.py index.html -o output.html --compress
+```
+
+Generate plain minified HTML only:
+
+```bash
+python html_optimizer.py index.html -o output.html --minify-only
 ```
 
 ## Development Notes

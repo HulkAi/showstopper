@@ -162,7 +162,10 @@ def main():
             print("Inlining external resources...")
             html = inline_resources(html, base_dir)
 
-        if args.compress and not args.minify_only:
+        # Default to the compressed loader unless the user explicitly opts out.
+        should_compress = not args.minify_only
+
+        if should_compress:
             result = compress_and_obfuscate(html)
             print("Performed minification, compression, and obfuscation.")
         else:
