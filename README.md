@@ -1,6 +1,6 @@
-# new_image_designs
+# showstopper
 
-An editorial-style portfolio website for Wayne Clarke, built as a static front end with HTML, CSS, JavaScript, and media assets. The site combines cinematic visuals, a filterable project gallery, theme switching, and motion effects to present design and development work in a polished, interactive format.
+An editorial-style portfolio website for Alex Doe, built as a static front end with HTML, CSS, JavaScript, and media assets. The site combines cinematic visuals, a filterable project gallery, theme switching, and motion effects to present design and development work in a polished, interactive format.
 
 ## At a Glance
 
