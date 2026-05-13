@@ -206,14 +206,7 @@ The site is intended for modern evergreen browsers that support:
 - `localStorage`
 - ES6 JavaScript
 
-## Ignored Files
-
-The repository ignores generated output from OpenCode graphify tooling via:
-
-```gitignore
-.opencode/graphify-out
-```
 
 ## License
 
-No license has been defined yet. Add one if you plan to publish or share the project publicly.
+MIT license 
